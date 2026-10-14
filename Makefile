@@ -47,9 +47,12 @@ VASM_FLAGS := -m$(CPU) -quiet -Fhunk -kick1hunks -I $(LIB_DIR) -D DISABLE_DUALPF
 VBCC_VASM_FLAGS := -m$(CPU) -quiet -Fhunk -kick1hunks -nowarn=62 -I $(LIB_DIR) $(COMMON_DEFINES)
 
 .DEFAULT_GOAL := all
-.PHONY: all clean rebuild help list-modules game $(MODULES) check-tools
+.PHONY: all clean rebuild help list-modules game build-68020 $(MODULES) check-tools
 
 all: $(EXES)
+
+build-68020:
+	$(MAKE) CPU=68020 BUILD_DIR="$(ROOT)/build-68020" all
 
 $(MODULES): %: $(BUILD_DIR)/%.exe
 
@@ -106,5 +109,5 @@ list-modules:
 	@printf '%s\n' $(MODULES)
 
 help:
-	@echo "Targets: all, jetpac, frontpage, game, clean, rebuild, list-modules"
-	@echo "Overrides: CPU=68000|68020 HEAP_MEMORY=141308 HASC_PYTHON=... HASC_ROOT=... VASM=... VLINK=... VBCC_CC=... LIBS='graphics input'"
+	@echo "Targets: all, jetpac, frontpage, build-68020, game, clean, rebuild, list-modules"
+	@echo "Overrides: CPU=68000 (default)|68020 HEAP_MEMORY=141308 HASC_PYTHON=... HASC_ROOT=... VASM=... VLINK=... VBCC_CC=... LIBS='graphics input'"
