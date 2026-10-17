@@ -12,6 +12,7 @@ extern func LoadPalette(palette_ptr:int, num_colors:int) -> void;
 extern func HeapInit() -> void;
 extern func SetFont(font_ptr:int) -> int;
 extern func Text(x:int, y:int, string:int, color:int) -> int;
+extern func PrintToBob(string:int, color:int, flags:int) -> int;
 extern func DrawGadget(gadget_ptr:int) -> int;
 extern func EditBoxPollKey(text_ptr:int, max_len:int, cursor_pos_ptr:int) -> int;
 
@@ -291,6 +292,7 @@ const MAX_SPRITES = 8;
 const START_LETTERS_WHEN = 1;    //starts letters when gathered the amount of energy cells
 
 const F1_DEBUG = 0;
+const MENU_TEXT_BOB_COUNT = 35;
 
     public CreateMap;
     public CopyLevelBuffer;
@@ -308,6 +310,7 @@ main:
         jsr highscore_load_dos
         jsr TakeSystem
         jsr game_start
+        jsr free_text_bobs
         jsr ReleaseSystem
         ; pure DOS context here - no system switching needed
         move.b highscore_dirty,d0
@@ -2039,6 +2042,45 @@ main:
         }
     }
 
+    proc free_menu_text_bobs() -> void {
+        var i:int;
+        var handle:int;
+
+        for i = 0 to MENU_TEXT_BOB_COUNT - 1
+        {
+            handle = menu_text_bobs[i];
+            if(handle > 0) { call DestroyBob(handle); }
+            menu_text_bobs[i] = 0;
+        }
+    }
+
+    proc free_text_bobs() -> void {
+        call free_menu_text_bobs();
+        if(hud_text_bob > 0) { call DestroyBob(hud_text_bob); }
+        if(bonus_text_bob > 0) { call DestroyBob(bonus_text_bob); }
+        hud_text_bob = 0;
+        bonus_text_bob = 0;
+    }
+
+    proc draw_menu_text(slot:int, x:int, y:int, string:int, color:int) -> void {
+        var handle:int;
+
+        handle = menu_text_bobs[slot];
+        if(handle == 0)
+        {
+            handle = PrintToBob(string, color, 3);
+            menu_text_bobs[slot] = handle;
+        }
+        if(handle > 0)
+        {
+            call PasteBob(handle, x * 8, y * 8, 1);
+        }
+        else
+        {
+            call Text(x, y, string, color);
+        }
+    }
+
     proc draw_ladder_screen() -> void {
         var i:int;
         var row:int;
@@ -2046,8 +2088,8 @@ main:
         var name_ptr:ptr;
         var rank_ptr:int;
 
-        call Text(40/2-17/2, 2, &ladder_title_text, HUD_TEXT_COLOR_IDX_3);
-        call Text(40/2-10/2, 29, &menu_start_text, HUD_TEXT_COLOR_IDX);
+        call draw_menu_text(4, 40/2-17/2, 2, &ladder_title_text, HUD_TEXT_COLOR_IDX_3);
+        call draw_menu_text(3, 40/2-10/2, 29, &menu_start_text, HUD_TEXT_COLOR_IDX);
 
         for i = 0 to HIGHSCORE_ENTRIES - 1
         {
@@ -2063,15 +2105,18 @@ main:
             else if(i == 7) { rank_ptr = &ladder_rank_08; }
             else if(i == 8) { rank_ptr = &ladder_rank_09; }
 
-            call Text(5, row, rank_ptr, HUD_TEXT_COLOR_IDX);
+            call draw_menu_text(5 + i * 3, 5, row, rank_ptr, HUD_TEXT_COLOR_IDX);
 
             base = i * HIGHSCORE_NAME_STRIDE;
             name_ptr = &highscore_names;
             name_ptr = name_ptr + base;
-            call Text(10, row, name_ptr, HUD_TEXT_COLOR_IDX_2);
+            call draw_menu_text(6 + i * 3, 10, row, name_ptr, HUD_TEXT_COLOR_IDX_2);
 
-            call ladder_write_score_text(highscore_scores[i]);
-            call Text(28, row, &ladder_score_text, HUD_TEXT_COLOR_IDX);
+            if(menu_text_bobs[7 + i * 3] <= 0)
+            {
+                call ladder_write_score_text(highscore_scores[i]);
+            }
+            call draw_menu_text(7 + i * 3, 28, row, &ladder_score_text, HUD_TEXT_COLOR_IDX);
         }
     }
 
@@ -2114,6 +2159,7 @@ main:
             highscore_needs_insert = 0;
         }
         call menu_write_high(high_score);
+        call free_menu_text_bobs();
 
         screen = 0;
         rocket_x = MENU_ROCKET_START_X;
@@ -2149,12 +2195,14 @@ main:
             key = GetKey();
             if(key == KEY_ESC)
             {
+                call free_menu_text_bobs();
                 return 0;
             }
 
             fire_btn = ReadJoystickFire();
             if(fire_btn != 0)
             {
+                call free_menu_text_bobs();
                 return 1;
             }
 
@@ -2298,10 +2346,10 @@ main:
                 call GetBobBackground(player_bob, player_x, MENU_PLAYER_Y);
                 call PasteBob(player_bob, player_x, MENU_PLAYER_Y, 1);
 
-                call Text(13, 1, &menu_high_text, HUD_TEXT_COLOR_IDX_2);
-                call Text(20-8, 18, &menu_title_text, HUD_TEXT_COLOR_IDX);
-                call Text(20-7, 20, &author_text, HUD_TEXT_COLOR_IDX);
-                call Text(40/2-10/2, 22, &menu_start_text, HUD_TEXT_COLOR_IDX);
+                call draw_menu_text(0, 13, 1, &menu_high_text, HUD_TEXT_COLOR_IDX_2);
+                call draw_menu_text(1, 20-8, 18, &menu_title_text, HUD_TEXT_COLOR_IDX);
+                call draw_menu_text(2, 20-7, 20, &author_text, HUD_TEXT_COLOR_IDX);
+                call draw_menu_text(3, 40/2-10/2, 22, &menu_start_text, HUD_TEXT_COLOR_IDX);
             }
             else
             {
@@ -2458,12 +2506,12 @@ main:
             call SwapScreen();
             call ClearScreen();
             call _stars_animate(gfx_current_screen_ptr);
-            call Text(40/2-7, 8, &highscore_new_title_text, HUD_TEXT_COLOR_IDX);
-            call Text(40/2-7, 10, &highscore_new_prompt_text, HUD_TEXT_COLOR_IDX);
-            call Text(40/2-6, 13, &highscore_new_score_label_text, HUD_TEXT_COLOR_IDX);
-            call Text(40/2+4, 13, &ladder_score_text, HUD_TEXT_COLOR_IDX);
+            call draw_menu_text(0, 40/2-7, 8, &highscore_new_title_text, HUD_TEXT_COLOR_IDX);
+            call draw_menu_text(1, 40/2-7, 10, &highscore_new_prompt_text, HUD_TEXT_COLOR_IDX);
+            call draw_menu_text(2, 40/2-6, 13, &highscore_new_score_label_text, HUD_TEXT_COLOR_IDX);
+            call draw_menu_text(3, 40/2+4, 13, &ladder_score_text, HUD_TEXT_COLOR_IDX);
             call DrawGadget(&highscore_name_editbox_x);
-            call Text(40/2-11, 20, &highscore_new_hint_text, HUD_TEXT_COLOR_IDX);
+            call draw_menu_text(4, 40/2-11, 20, &highscore_new_hint_text, HUD_TEXT_COLOR_IDX);
             call WaitFrame();
             call Show();
         }
@@ -2804,6 +2852,9 @@ main:
             hud_line_text[18] = lives_digit;
             call hud_write_level(current_level);
 
+            if(hud_text_bob > 0) { call DestroyBob(hud_text_bob); }
+            hud_text_bob = PrintToBob(&hud_line_text, HUD_TEXT_COLOR_IDX, 1);
+
             hud_prev_score = current_score;
             hud_prev_high_score = high_score;
             hud_prev_level = current_level;
@@ -2843,13 +2894,31 @@ main:
         }
 
         // Keep HUD on top after all dynamic BOB rendering.
-        call Text(0, 0, &hud_line_text, HUD_TEXT_COLOR_IDX);
+        if(hud_text_bob > 0)
+        {
+            call PasteBob(hud_text_bob, 0, 0, 1);
+        }
+        else
+        {
+            call Text(0, 0, &hud_line_text, HUD_TEXT_COLOR_IDX);
+        }
     }
 
     proc draw_bonus_on_current_screen() -> void {
         if(bonus_active != 0)
         {
-            call Text(BONUS_TEXT_X, BONUS_TEXT_Y, &bonus_text, HUD_TEXT_COLOR_IDX);
+            if(bonus_text_bob == 0)
+            {
+                bonus_text_bob = PrintToBob(&bonus_text, HUD_TEXT_COLOR_IDX, 3);
+            }
+            if(bonus_text_bob > 0)
+            {
+                call PasteBob(bonus_text_bob, BONUS_TEXT_X * 8, BONUS_TEXT_Y * 8, 1);
+            }
+            else
+            {
+                call Text(BONUS_TEXT_X, BONUS_TEXT_Y, &bonus_text, HUD_TEXT_COLOR_IDX);
+            }
         }
     }
 
@@ -3564,17 +3633,27 @@ main:
     proc end_game() -> void {
         var wait_counter:int;
 
+        game_over_text_bob = PrintToBob(&game_over_text, HUD_TEXT_COLOR_IDX, 3);
         wait_counter = 0;
         while (wait_counter < GAME_OVER_WAIT_FRAMES)
         {
             call SwapScreen();
             call CopyLevelBuffer();
             call draw_rocket_on_current_screen(0, rocket_bob_a);
-            call Text(20-5, 22, &game_over_text, HUD_TEXT_COLOR_IDX);
+            if(game_over_text_bob > 0)
+            {
+                call PasteBob(game_over_text_bob, (20-5) * 8, 22 * 8, 1);
+            }
+            else
+            {
+                call Text(20-5, 22, &game_over_text, HUD_TEXT_COLOR_IDX);
+            }
             call WaitFrame();
             call Show();
             wait_counter = wait_counter + 1;
         }
+        if(game_over_text_bob > 0) { call DestroyBob(game_over_text_bob); }
+        game_over_text_bob = 0;
     }
 
     // Animate the rocket off-screen and back before loading the next stage.
@@ -4872,6 +4951,7 @@ data data_map1:
 4,5,21,21,21,21,21,21,21,22,29,30,29,30,29,30,29,30,29,39}
 
 bss level_bss:
+    menu_text_bobs.l[MENU_TEXT_BOB_COUNT]
     level_completed.w: 1
     map_data.l: 1  // u8* pointer (4 bytes, untyped)
     level_screen.b[51200]   // 320 * 256 / 8 * 5 bitplanes
@@ -4933,6 +5013,9 @@ data main_data:
     hud_prev_level.b = 0
     hud_prev_lives.b = 0
     hud_prev_fuel.b = 0
+    hud_text_bob.l = 0
+    bonus_text_bob.l = 0
+    game_over_text_bob.l = 0
     hud_dirty_a.b = 0
     hud_dirty_b.b = 0
     hud_force_redraw.b = 1
